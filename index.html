@@ -574,7 +574,11 @@
       }
 
       const collected = [];
-      const targetAmount = 81; 
+      const selectedCountry = (document.getElementById('country-filter')?.value || '').trim();
+      const selectedCast = (document.getElementById('cast-filter')?.value || '').trim();
+      // When a country or cast filter is active, load a much larger home catalogue
+      // so the selected filter has a substantial pool of films to work with.
+      const targetAmount = (selectedCountry || selectedCast) ? 720 : 81;
       let failsafe = 0;
 
       while (collected.length < targetAmount && failsafe < 20) {
@@ -681,6 +685,16 @@
         renderGrid('results-grid', filtered, searchDisplayPage, 'search');
         document.getElementById('results-count').textContent = filtered.length + ' results';
       } else {
+        // Rebuild the home catalogue when Country or Cast is selected.
+        // The loader automatically raises the batch size to 720 films.
+        const country = (document.getElementById('country-filter')?.value || '').trim();
+        const cast = (document.getElementById('cast-filter')?.value || '').trim();
+
+        if ((country || cast) && homeAllFilms.length < 720 && !isFetchingHome) {
+          loadHomeBrowse(false);
+          return;
+        }
+
         renderBrowseGrid();
       }
     }
