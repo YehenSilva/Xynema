@@ -314,6 +314,10 @@
       <span style="color:var(--text3);font-size:0.75rem;">–</span>
       <input class="year-input" type="number" id="year-to" placeholder="To" min="1900" max="2026">
     </div>
+    <span class="filter-label" style="margin-left:8px;">Country</span>
+    <select class="sort-select" id="country-filter" onchange="applySortFilter()"><option value="">All Countries</option></select>
+    <span class="filter-label" style="margin-left:8px;">Cast</span>
+    <input class="year-input" style="width:140px;" type="text" id="cast-filter" placeholder="Actor name" oninput="applySortFilter()">
     <button class="filter-apply-btn" onclick="applySortFilter()">Apply</button>
   </div>
 
@@ -643,6 +647,7 @@
       
       renderBrowseGrid();
       isFetchingHome = false;
+      enrichFilmDetails(collected);
     }
 
     function renderBrowseGrid() {
@@ -655,9 +660,13 @@
       let arr = [...films];
       const yFrom = parseInt(document.getElementById('year-from').value) || 0;
       const yTo = parseInt(document.getElementById('year-to').value) || 9999;
+      const country = document.getElementById('country-filter').value.trim().toLowerCase();
+      const cast = document.getElementById('cast-filter').value.trim().toLowerCase();
       if (yFrom || yTo < 9999) {
         arr = arr.filter(f => { const y = parseInt(f.year) || 0; return y >= yFrom && y <= yTo; });
       }
+      if (country) arr = arr.filter(f => (f.country || '').toLowerCase().split(',').map(v => v.trim()).includes(country));
+      if (cast) arr = arr.filter(f => (f.cast || '').toLowerCase().includes(cast));
       const sort = document.getElementById('sort-select').value;
       if (sort === 'year-desc') arr.sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
       else if (sort === 'year-asc') arr.sort((a, b) => (parseInt(a.year) || 0) - (parseInt(b.year) || 0));
@@ -912,7 +921,9 @@
       }
 
       searchAllResults = allResults;
+      updateCountryFilter();
       const filtered = getFilteredSorted(allResults);
+      enrichFilmDetails(allResults);
       document.getElementById('results-heading').textContent = `Results for "${q}"`;
       document.getElementById('results-count').textContent = filtered.length + ' results';
       renderGrid('results-grid', filtered, 1, 'search');
@@ -960,9 +971,35 @@
     }
 
     function omdbToFilm(m) {
-      const f = { id: m.imdbID, title: m.Title, year: m.Year, rating: m.imdbRating || '?', genre: 'Film', poster: m.Poster };
+      const f = { id: m.imdbID, title: m.Title, year: m.Year, rating: m.imdbRating || '?', genre: 'Film', poster: m.Poster, country: '', cast: '' };
       window.filmDataMap[f.id] = f; 
       return f;
+    }
+
+    async function enrichFilmDetails(films) {
+      await Promise.all(films.filter(f => !f.country && !f.cast).map(async f => {
+        try {
+          const res = await fetch(OMDB(`i=${encodeURIComponent(f.id)}`));
+          const d = await res.json();
+          if (d.Response === 'True') {
+            f.country = d.Country && d.Country !== 'N/A' ? d.Country : '';
+            f.cast = d.Actors && d.Actors !== 'N/A' ? d.Actors : '';
+            if (d.Genre && d.Genre !== 'N/A') f.genre = d.Genre;
+            if (d.imdbRating && d.imdbRating !== 'N/A') f.rating = d.imdbRating;
+          }
+        } catch {}
+      }));
+      updateCountryFilter();
+      applySortFilter();
+    }
+
+    function updateCountryFilter() {
+      const select = document.getElementById('country-filter');
+      const current = select.value;
+      const countries = new Set();
+      [...homeAllFilms, ...searchAllResults].forEach(f => (f.country || '').split(',').forEach(c => { const v = c.trim(); if (v) countries.add(v); }));
+      select.innerHTML = '<option value="">All Countries</option>' + [...countries].sort((a,b) => a.localeCompare(b)).map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+      select.value = countries.has(current) ? current : '';
     }
 
     // ── FILM INFO MODAL ──
